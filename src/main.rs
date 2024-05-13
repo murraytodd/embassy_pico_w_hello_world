@@ -39,9 +39,11 @@ async fn wifi_task(
 async fn main(spawner: Spawner) {
     info!("Program start");
     let p = embassy_rp::init(Default::default());
+
+    // PICO W WIFI CHIP SETUP
+    // Setup PIO-based SPI needed to communicate with the CYW43 networking chip
     let fw = include_bytes!("../../cyw43-firmware/43439A0.bin");
     let clm = include_bytes!("../../cyw43-firmware/43439A0_clm.bin");
-
     let pwr = Output::new(p.PIN_23, Level::Low);
     let cs = Output::new(p.PIN_25, Level::High);
     let mut pio = Pio::new(p.PIO0, Irqs);
@@ -64,6 +66,8 @@ async fn main(spawner: Spawner) {
     control
         .set_power_management(cyw43::PowerManagementMode::PowerSave)
         .await;
+
+    //
 
     let mut led = Output::new(p.PIN_22, Level::Low);
 

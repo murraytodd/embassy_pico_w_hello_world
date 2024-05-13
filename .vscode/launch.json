@@ -26,14 +26,10 @@
                     "coreIndex": 0,
                     "programBinary": "target/thumbv6m-none-eabi/debug/embassy-pico-w-hello-world",
                     "chip": "RP2040",
-                    // Uncomment this if you've downloaded the SVD from
-                    // https://github.com/raspberrypi/pico-sdk/raw/1.5.1/src/rp2040/hardware_regs/rp2040.svd
-                    // and placed it in the .vscode directory
-                    // "svdFile": "./.vscode/rp2040.svd",
                     "rttEnabled": true,
                     "options": {
                         "env": {
-                            "DEFMT_LOG": "debug"
+                            "DEFMT_LOG": "info"
                         }
                     },
                 }
@@ -66,7 +62,7 @@
                     "rttEnabled": true,
                     "options": {
                         "env": {
-                            "DEFMT_LOG": "debug"
+                            "DEFMT_LOG": "info"
                         }
                     },
                 }
