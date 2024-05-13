@@ -2,11 +2,12 @@
 #![no_main]
 
 mod netsetup;
-use embassy_net::Config;
+use embassy_net::{Config, IpEndpoint};
 
 use cyw43_pio::PioSpi;
 use defmt::*;
 use embassy_executor::Spawner;
+use embassy_net::udp::{PacketMetadata, SendError, UdpSocket};
 use embassy_net::{Stack, StackResources};
 use embassy_rp::bind_interrupts;
 use embassy_rp::clocks::RoscRng;
@@ -81,7 +82,7 @@ async fn main(spawner: Spawner) {
     // PICO W WIFI NETWORKING SERVICES SETUP
     let config = Config::dhcpv4(netsetup::dhcp_with_host_name());
     let seed: u64 = RoscRng.next_u64();
-    warn!("####### Random seed value seeded to 0x{=u64:#X}", seed);
+    warn!("Random seed value seeded to 0x{=u64:#X}", seed);
 
     static STACK: StaticCell<Stack<cyw43::NetDriver<'static>>> = StaticCell::new();
     static RESOURCES: StaticCell<StackResources<4>> = StaticCell::new(); // Increase this if you start getting full socket ring errors.
@@ -130,10 +131,38 @@ async fn main(spawner: Spawner) {
         Ok(ref add) => info!("event server resolved to {}", add),
         Err(e) => info!("error resolving event server: {}", e),
     }
+    let dest = server_addr.unwrap().first().unwrap().clone(); // this looks crazy to me
+
+    let mut rx_meta = [PacketMetadata::EMPTY; 16];
+    let mut rx_buffer = [0; 4096];
+    let mut tx_meta = [PacketMetadata::EMPTY; 16];
+    let mut tx_buffer = [0; 4096];
+    let mut _buf = [0; 4096];
+
+    let mut socket = UdpSocket::new(
+        stack,
+        &mut rx_meta,
+        &mut rx_buffer,
+        &mut tx_meta,
+        &mut tx_buffer,
+    );
+
+    let destination = IpEndpoint {
+        addr: dest,
+        port: 9932,
+    };
+
+    socket.bind(9400).unwrap();
 
     let mut led = Output::new(p.PIN_22, Level::Low);
 
     loop {
+        match socket.send_to("message".as_bytes(), destination).await {
+            Ok(_) => info!("Message sent into the ether..."),
+            Err(SendError::NoRoute) => info!("UDP No Route to Destination"),
+            Err(SendError::SocketNotBound) => error!("UDP Socket not bound"),
+        }
+
         info!("external led on, onboard off!");
         led.set_high();
         control.gpio_set(0, false).await;

@@ -40,3 +40,36 @@ DNS to find the right IP address.
 
 Note that all configuration names and passwords are stored in the `netsetup.rs` file. You should change
 this file directly to suit your needs.
+
+# Sending data packets via UDP to a server
+
+In my opinion, this is the fundamental task that a person would want to buy a Raspberry Pi Pico W for: 
+to periodically gather some information, such as sensor readings, and to send it back to some server
+wirelessly. This makes it possible to be "untethered" and not need physical connection via USB cables
+or UART wires or anything like that.
+
+I had previously created an example where the remote server was using the TCP protocol, but frankly, 
+I don't need the fault tollerance of TCP. Depending on the application, I might not care if there's a
+running service somewhere ready to receive my messages. And that's the beauty of UDP: as long as
+there's theoretically a route to send UDP packets with, that's good enough for me!
+
+Here's a simple python UDP server program that I ran on the remote machine:
+
+```python
+import socket
+
+# Create a UDP socket
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+# Bind the socket to the port
+server_address = ("0.0.0.0", 9932)
+sock.bind(server_address)
+
+# Listen for incoming messages
+while True:
+    data, address = sock.recvfrom(1024)
+
+    # Print the message and address
+    print("Received message: %s" % data)
+    print("From address: %s" % (address,))
+```
