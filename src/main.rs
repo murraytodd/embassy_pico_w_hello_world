@@ -9,11 +9,13 @@ use defmt::*;
 use embassy_executor::Spawner;
 use embassy_net::{Stack, StackResources};
 use embassy_rp::bind_interrupts;
+use embassy_rp::clocks::RoscRng;
 use embassy_rp::gpio;
 use embassy_rp::peripherals::{DMA_CH0, PIN_23, PIN_25, PIO0};
 use embassy_rp::pio::{InterruptHandler, Pio};
 use embassy_time::{Duration, Timer};
 use gpio::{Level, Output};
+use rand_core::RngCore;
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
 
@@ -78,7 +80,9 @@ async fn main(spawner: Spawner) {
 
     // PICO W WIFI NETWORKING SERVICES SETUP
     let config = Config::dhcpv4(netsetup::dhcp_with_host_name());
-    let seed: u64 = 0x0123_4567_89ab_cdef; // TODO, get random bits from ROSC
+    let seed: u64 = RoscRng.next_u64();
+    warn!("####### Random seed value seeded to 0x{=u64:#X}", seed);
+
     static STACK: StaticCell<Stack<cyw43::NetDriver<'static>>> = StaticCell::new();
     static RESOURCES: StaticCell<StackResources<4>> = StaticCell::new(); // Increase this if you start getting full socket ring errors.
     let stack = &*STACK.init(Stack::new(
