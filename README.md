@@ -27,3 +27,16 @@ to create a makeshift SPI channel. That's pretty complex for a hello world examp
 purpose of "hello world", but okay, we're going to do it anyway! Besides, some of the complex setup in 
 the code is needed anyway for our networking examples that will come next.
 
+## Networking configuration with DCHP and Hostname
+
+This chunk of functionality brings all the networking goodness up. (Not a small task!) We start by 
+joining the WIFI network, then we ask the DHCP server to provide the network configuration. As an added
+detail, we enable an optional feature to provide the DHCP server the name of our device&mdash;defaulting to 
+'picow'. (We do this to enable other devices to find the Pico's IP address via a network router's
+internal/local DNS services, something offered by most local network routers these days.) We finally test 
+the resolution of another server on the network. This will be a server that we later try to send 
+information to. We're not doing any sending or receiving yet&mdash;we're just verifying that we can use
+DNS to find the right IP address.
+
+Note that all configuration names and passwords are stored in the `netsetup.rs` file. You should change
+this file directly to suit your needs.

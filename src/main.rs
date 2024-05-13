@@ -1,9 +1,13 @@
 #![no_std]
 #![no_main]
 
+mod netsetup;
+use embassy_net::Config;
+
 use cyw43_pio::PioSpi;
 use defmt::*;
 use embassy_executor::Spawner;
+use embassy_net::{Stack, StackResources};
 use embassy_rp::bind_interrupts;
 use embassy_rp::gpio;
 use embassy_rp::peripherals::{DMA_CH0, PIN_23, PIN_25, PIO0};
@@ -35,6 +39,11 @@ async fn wifi_task(
     runner.run().await
 }
 
+#[embassy_executor::task]
+async fn net_task(stack: &'static Stack<cyw43::NetDriver<'static>>) -> ! {
+    stack.run().await
+}
+
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     info!("Program start");
@@ -59,7 +68,7 @@ async fn main(spawner: Spawner) {
 
     static STATE: StaticCell<cyw43::State> = StaticCell::new();
     let state = STATE.init(cyw43::State::new());
-    let (_net_device, mut control, runner) = cyw43::new(state, pwr, spi, fw).await;
+    let (net_device, mut control, runner) = cyw43::new(state, pwr, spi, fw).await;
     unwrap!(spawner.spawn(wifi_task(runner)));
 
     control.init(clm).await;
@@ -67,7 +76,56 @@ async fn main(spawner: Spawner) {
         .set_power_management(cyw43::PowerManagementMode::PowerSave)
         .await;
 
-    //
+    // PICO W WIFI NETWORKING SERVICES SETUP
+    let config = Config::dhcpv4(netsetup::dhcp_with_host_name());
+    let seed: u64 = 0x0123_4567_89ab_cdef; // TODO, get random bits from ROSC
+    static STACK: StaticCell<Stack<cyw43::NetDriver<'static>>> = StaticCell::new();
+    static RESOURCES: StaticCell<StackResources<4>> = StaticCell::new(); // Increase this if you start getting full socket ring errors.
+    let stack = &*STACK.init(Stack::new(
+        net_device,
+        config,
+        RESOURCES.init(StackResources::<4>::new()),
+        seed,
+    ));
+    let mac_addr = stack.hardware_address();
+    info!("Hardware configured. MAC Address is {}", mac_addr);
+
+    unwrap!(spawner.spawn(net_task(stack))); // Start networking services thread
+
+    loop {
+        // JOIN THE WIFI NETWORK
+        match control
+            .join_wpa2(netsetup::WIFI_NETWORK, netsetup::WIFI_PASSWORD)
+            .await
+        {
+            Ok(_) => {
+                info!("Successfully joined {}", netsetup::WIFI_NETWORK);
+                break;
+            }
+            Err(err) => {
+                info!("Join failed with status={}", err.status);
+            }
+        }
+    }
+
+    info!("waiting for DHCP...");
+    while !stack.is_config_up() {
+        Timer::after_millis(100).await;
+    }
+    match stack.config_v4() {
+        Some(a) => info!("IP Address appears to be: {}", a.address),
+        None => info!("No IP address assigned!"),
+    }
+    info!("DHCP is now up!");
+
+    let server_addr = stack
+        .dns_query(netsetup::SERVER_NAME, embassy_net::dns::DnsQueryType::A)
+        .await;
+
+    match server_addr {
+        Ok(ref add) => info!("event server resolved to {}", add),
+        Err(e) => info!("error resolving event server: {}", e),
+    }
 
     let mut led = Output::new(p.PIN_22, Level::Low);
 
