@@ -12,16 +12,26 @@ use embassy_net::{Stack, StackResources};
 use embassy_rp::bind_interrupts;
 use embassy_rp::clocks::RoscRng;
 use embassy_rp::gpio;
-use embassy_rp::peripherals::{DMA_CH0, PIN_23, PIN_25, PIO0};
-use embassy_rp::pio::{InterruptHandler, Pio};
+use embassy_rp::i2c;
+use embassy_rp::i2c::Config as I2CConfig;
+use embassy_rp::i2c::InterruptHandler as I2CInterruptHandler;
+use embassy_rp::peripherals::{DMA_CH0, I2C0, PIN_23, PIN_25, PIO0};
+use embassy_rp::pio::InterruptHandler as PioInterruptHandler;
+use embassy_rp::pio::Pio;
 use embassy_time::{Duration, Timer};
 use gpio::{Level, Output};
 use rand_core::RngCore;
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
 
+const BMP085_DEVICE_ADDRESS: u16 = 0x77;
+const BMP085_REGISTER_CHIPID: u8 = 0xD0;
+const BMP085_REGISTER_VERSION: u8 = 0xD1;
+const BMP085_EXPECTED_ID: u8 = 0x55;
+
 bind_interrupts!(struct Irqs {
-    PIO0_IRQ_0 => InterruptHandler<PIO0>;
+    PIO0_IRQ_0 => PioInterruptHandler<PIO0>;
+    I2C0_IRQ => I2CInterruptHandler<I2C0>;
 });
 
 #[cortex_m_rt::pre_init]
@@ -79,10 +89,40 @@ async fn main(spawner: Spawner) {
         .set_power_management(cyw43::PowerManagementMode::PowerSave)
         .await;
 
+    // I2C Setup
+    info!("Starting I2C Setup");
+    let sda = p.PIN_4;
+    let scl = p.PIN_5;
+    let mut i2c = i2c::I2c::new_async(p.I2C0, scl, sda, Irqs, I2CConfig::default());
+    info!("I2C Initialized");
+
+    let mut chip_id = [0; 1];
+    let mut chip_rev = [0; 1];
+    let i2c_init_op = i2c
+        .write_read_async(
+            BMP085_DEVICE_ADDRESS,
+            [BMP085_REGISTER_CHIPID],
+            &mut chip_id,
+        )
+        .await;
+    match (i2c_init_op, chip_id[0]) {
+        (Ok(_), BMP085_EXPECTED_ID) => info!("Received expected Chip ID"),
+        (Err(e), _) => error!("I2C Error {}", e),
+        (Ok(_), bad_id) => error!("Unexpected chip ID {}", bad_id),
+    }
+    i2c.write_read_async(
+        BMP085_DEVICE_ADDRESS,
+        [BMP085_REGISTER_VERSION],
+        &mut chip_rev,
+    )
+    .await
+    .unwrap();
+    info!("Received chip version {=u8:#X}", chip_rev[0]);
+
     // PICO W WIFI NETWORKING SERVICES SETUP
     let config = Config::dhcpv4(netsetup::dhcp_with_host_name());
     let seed: u64 = RoscRng.next_u64();
-    warn!("Random seed value seeded to 0x{=u64:#X}", seed);
+    warn!("Random seed value seeded to {=u64:#X}", seed);
 
     static STACK: StaticCell<Stack<cyw43::NetDriver<'static>>> = StaticCell::new();
     static RESOURCES: StaticCell<StackResources<4>> = StaticCell::new(); // Increase this if you start getting full socket ring errors.

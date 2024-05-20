@@ -41,7 +41,7 @@ DNS to find the right IP address.
 Note that all configuration names and passwords are stored in the `netsetup.rs` file. You should change
 this file directly to suit your needs.
 
-# Sending data packets via UDP to a server
+## Sending data packets via UDP to a server
 
 In my opinion, this is the fundamental task that a person would want to buy a Raspberry Pi Pico W for: 
 to periodically gather some information, such as sensor readings, and to send it back to some server
@@ -73,3 +73,13 @@ while True:
     print("Received message: %s" % data)
     print("From address: %s" % (address,))
 ```
+
+## Basic I2C Operations
+
+I have a device (BMP180 pressure monitor) that I used as a reference. It has a basic command that
+you can use to query the chip ID where the expected value (0x55) is known. (It's meant to help
+verify you're talking to the device you're expecting.) This was meant to test the basic ability
+to configure the I2C bus and perform a basic write and read.
+
+Rather than using the pins used in the embassy_rp example (associated with I2C1) I used GPIO pins
+4 and 5 which are assocated with I2C0.
